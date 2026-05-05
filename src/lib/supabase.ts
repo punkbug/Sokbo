@@ -26,10 +26,6 @@ export const isAlreadySent = async (link: string): Promise<boolean> => {
     .eq("link", link)
     .single();
 
-  if (error && error.code !== "PGRST116") {
-    console.error("Error checking sent history:", error);
-  }
-
   return !!data;
 };
 
@@ -41,9 +37,7 @@ export const markAsSent = async (link: string, title: string): Promise<void> => 
     .from("sent_history")
     .insert([{ link, title, sent_at: new Date().toISOString() }]);
 
-  if (error) {
-    console.error("Error marking as sent:", error);
-  }
+  if (error) console.error("DB Error (markAsSent):", error);
 };
 
 /**
@@ -56,12 +50,7 @@ export const getRecentNews = async (limit: number = 10): Promise<any[]> => {
     .order("sent_at", { ascending: false })
     .limit(limit);
 
-  if (error) {
-    console.error("Error fetching recent news:", error);
-    return [];
-  }
-
-  return data;
+  return data || [];
 };
 
 /**
@@ -74,7 +63,7 @@ export const getSubscribers = async (preset: string): Promise<any[]> => {
     .eq("preset", preset);
 
   if (error) {
-    console.error("Error fetching subscribers:", error);
+    console.error("DB Error (getSubscribers):", error);
     return [];
   }
 
@@ -85,7 +74,9 @@ export const getSubscribers = async (preset: string): Promise<any[]> => {
  * 관심사 구독 추가
  */
 export const addSubscriber = async (preset: string, subscription: any): Promise<void> => {
-  const { error } = await supabase
+  console.log(`Adding subscriber for [${preset}] with endpoint: ${subscription.endpoint}`);
+  
+  const { data, error } = await supabase
     .from("subscriptions")
     .upsert(
       [{ 
@@ -98,8 +89,10 @@ export const addSubscriber = async (preset: string, subscription: any): Promise<
     );
 
   if (error) {
-    console.error("Error adding subscriber:", error);
+    console.error("DB Error (addSubscriber):", error);
+    throw error; // API Route에서 에러를 잡을 수 있게 던짐
   }
+  console.log("Successfully saved subscription to DB");
 };
 
 /**
@@ -112,7 +105,5 @@ export const removeSubscriber = async (preset: string, subscription: any): Promi
     .eq("preset", preset)
     .eq("endpoint", subscription.endpoint);
 
-  if (error) {
-    console.error("Error removing subscriber:", error);
-  }
+  if (error) console.error("DB Error (removeSubscriber):", error);
 };
