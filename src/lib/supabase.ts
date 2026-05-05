@@ -44,10 +44,11 @@ export const markAsSent = async (link: string, title: string): Promise<void> => 
  * 최근 발송된 속보 목록 가져오기 (news 테이블에서 풍부한 정보 조회)
  */
 export const getRecentNews = async (limit: number = 20): Promise<any[]> => {
+  const now = new Date().toISOString();
   const { data, error } = await supabase
     .from("news")
     .select("*")
-    .gt("expires_at", new Date().toISOString()) // 24시간 지난 것 필터링
+    .gt("expires_at", now) 
     .order("published_at", { ascending: false })
     .limit(limit);
 
