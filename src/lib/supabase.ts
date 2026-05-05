@@ -41,14 +41,19 @@ export const markAsSent = async (link: string, title: string): Promise<void> => 
 };
 
 /**
- * 최근 발송된 속보 목록 가져오기
+ * 최근 발송된 속보 목록 가져오기 (news 테이블에서 풍부한 정보 조회)
  */
-export const getRecentNews = async (limit: number = 10): Promise<any[]> => {
+export const getRecentNews = async (limit: number = 20): Promise<any[]> => {
   const { data, error } = await supabase
-    .from("sent_history")
+    .from("news")
     .select("*")
-    .order("sent_at", { ascending: false })
+    .order("published_at", { ascending: false })
     .limit(limit);
+
+  if (error) {
+    console.error("Error fetching news feed:", error);
+    return [];
+  }
 
   return data || [];
 };
