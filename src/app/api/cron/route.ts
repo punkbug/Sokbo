@@ -28,16 +28,17 @@ export async function GET(request: Request) {
       const freshNews = rawNews.filter(n => new Date(n.pubDate) >= tenMinutesAgo);
 
       for (const news of freshNews) {
-        // 2. 가치 평가 (Scoring)
-        const { score, reasonTags } = scoreNews(news.title, ""); // 네이버 API는 source를 따로 안주므로 제목에서 추출하거나 생략
+        // 2. 가치 평가 (Scoring - UI 표시용으로 유지)
+        const { score, reasonTags } = scoreNews(news.title, "");
+        const cleanTitle = news.title.replace(/<[^>]*>?/gm, "");
 
-        // 3. 임계치(150점) 및 중복 확인
-        if (score >= 150) {
+        // 3. '속보' 키워드 포함 여부 확인 (점수와 상관없이 수집)
+        if (cleanTitle.includes("속보")) {
           const alreadySent = await isAlreadySent(news.link);
           if (!alreadySent) {
             // 4. DB 저장 (24시간 자동 만료 포함)
             const { error } = await supabase.from("news").insert([{
-              title: news.title.replace(/<[^>]*>?/gm, ""),
+              title: cleanTitle,
               url: news.link,
               category: preset,
               score,
@@ -50,11 +51,11 @@ export async function GET(request: Request) {
               // 5. 푸시 발송
               await sendPushNotification(
                 subscribers,
-                `[${preset} 중요]`,
-                news.title.replace(/<[^>]*>?/gm, ""),
+                `[${preset} 속보]`,
+                cleanTitle,
                 news.link
               );
-              results.push({ preset, title: news.title, score });
+              results.push({ preset, title: cleanTitle, score });
             }
           }
         }
