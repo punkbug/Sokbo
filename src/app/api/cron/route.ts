@@ -7,6 +7,12 @@ import { PRESETS } from "@/lib/presets";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  // 보안 검증: Authorization 헤더 확인
+  const authHeader = request.headers.get("authorization");
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
   const results = [];
 
   for (const [preset, keywords] of Object.entries(PRESETS)) {

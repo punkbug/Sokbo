@@ -20,5 +20,28 @@ Sokbo는 넘쳐나는 뉴스 속에서 사용자가 설정한 관심사(증시, 
 
 Sokbo는 현재 웹 기반 MVP 단계를 넘어, 더 안정적인 푸시 환경과 고도화된 사용자 경험을 위해 **네이티브 앱 패키징 및 스토어 출시**를 목표로 하고 있습니다.
 
+## 📦 배포 및 무료 10분 주기 설정
+
+1. **Vercel 배포**: GitHub 저장소를 연결하고 환경 변수를 등록합니다. (`CRON_SECRET` 필수)
+2. **Supabase 트리거 설정**: Vercel 무료 플랜의 제한을 피하기 위해 Supabase를 스케줄러로 사용합니다.
+   - Supabase SQL Editor에서 아래 쿼리를 실행하세요.
+
+```sql
+-- 1. HTTP 요청 확장 활성화
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+-- 2. 10분 주기 트리거 등록 (URL과 SECRET을 본인 설정에 맞게 수정)
+SELECT cron.schedule(
+  'sokbo-10min-trigger',
+  '*/10 * * * *',
+  $$
+  SELECT net.http_get(
+    url := 'https://여러분의-앱-이름.vercel.app/api/cron',
+    headers := jsonb_build_object('Authorization', 'Bearer 여러분의_CRON_SECRET_값')
+  );
+  $$
+);
+```
+
 ---
 © 2026 Sokbo Project.
