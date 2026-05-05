@@ -26,7 +26,72 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
 
-  // ... (기존 useEffect 동일)
+  useEffect(() => {
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    setIsIOS(/iphone|ipad|ipod/.test(userAgent));
+    setPermissionState(Notification.permission);
+
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      navigator.serviceWorker.register("/sw.js").then(async (reg) => {
+        const sub = await reg.pushManager.getSubscription();
+        setSubscription(sub);
+        
+        if (!sub && Notification.permission === "granted") {
+          subscribeUser(reg);
+        }
+      });
+    }
+
+    const saved = localStorage.getItem("subscribedPresets");
+    if (saved) setSubscribedPresets(JSON.parse(saved));
+
+    const fetchNews = async () => {
+      try {
+        const res = await fetch("/api/news");
+        if (res.ok) setRecentNews(await res.json());
+      } catch (e) { console.error(e); }
+    };
+    fetchNews();
+    const interval = setInterval(fetchNews, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const subscribeUser = async (reg: ServiceWorkerRegistration) => {
+    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!vapidKey) {
+      console.error("VAPID Public Key is missing");
+      return;
+    }
+
+    try {
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      });
+      setSubscription(sub);
+    } catch (e) {
+      console.error("Subscription failed", e);
+    }
+  };
+
+  const requestPermission = async () => {
+    setLoading(true);
+    try {
+      const permission = await Notification.requestPermission();
+      setPermissionState(permission);
+      
+      if (permission === "granted") {
+        const reg = await navigator.serviceWorker.ready;
+        await subscribeUser(reg);
+      } else {
+        alert("알림 권한이 거부되었습니다. 브라우저 설정에서 알림을 허용해주세요.");
+      }
+    } catch (error) {
+      console.error("Permission request failed", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const testDirectPush = async () => {
     if (!subscription) {
@@ -59,7 +124,6 @@ export default function Home() {
       return;
     }
 
-    console.log("Submitting subscription to server:", subscription);
     const isSubscribed = subscribedPresets.includes(preset);
     const action = isSubscribed ? "unsubscribe" : "subscribe";
 
