@@ -132,7 +132,7 @@ export default function Home() {
         </button>
       </header>
 
-      {isIOS && !window.navigator.standalone && (
+      {isIOS && !(window.navigator as any).standalone && (
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6">
           <div className="flex gap-3">
             <Info className="w-5 h-5 text-blue-500 shrink-0" />
