@@ -28,7 +28,7 @@ export const scoreNews = (title: string, source: string): ScoredNews => {
   });
 
   // 2. 언론사 가점
-  if (MAJOR_SOURCES.some(ms => source.includes(kw => ms))) {
+  if (MAJOR_SOURCES.some(ms => source.includes(ms))) {
     score += 20;
     reasonTags.push("주요 언론사");
   }
