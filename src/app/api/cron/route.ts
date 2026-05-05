@@ -15,12 +15,11 @@ export async function GET(request: Request) {
   const now = new Date();
   const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
 
-  // 통합 구독자 가져오기 (카테고리 구분 없음)
-  const { data: subs, error } = await supabase.from("subscriptions").select("subscription_json");
-  if (error || !subs || subs.length === 0) return NextResponse.json({ success: true, message: "No subscribers" });
-  const subscribers = subs.map(s => s.subscription_json);
+  // 1. 모든 구독자 가져오기
+  const { data: subs } = await supabase.from("subscriptions").select("subscription_json");
+  const subscribers = subs?.map(s => s.subscription_json) || [];
 
-  // 전체 속보 수집
+  // 2. 전체 속보 수집
   const rawNews = await fetchNaverNews("속보");
   const freshNews = rawNews.filter(n => new Date(n.pubDate) >= tenMinutesAgo && n.title.includes("속보"));
 
@@ -28,20 +27,26 @@ export async function GET(request: Request) {
     const cleanTitle = news.title.replace(/<[^>]*>?/gm, "");
     const alreadySent = await isAlreadySent(news.link);
     
-    if (!alreadySent) {
-      await supabase.from("news").insert([{
-        title: cleanTitle,
-        url: news.link,
-        category: "속보",
-        published_at: news.pubDate,
-        expires_at: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
-      }]);
+    // 3. 무조건 DB 저장 (푸시 여부 상관없음)
+    const { error: insertError } = await supabase.from("news").insert([{
+      title: cleanTitle,
+      url: news.link,
+      category: "속보",
+      published_at: news.pubDate,
+      expires_at: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
+    }]);
 
-      await sendPushNotification(subscribers, "[속보]", cleanTitle, news.link);
-      await markAsSent(news.link, cleanTitle);
-      results.push({ title: cleanTitle });
+    if (!insertError) {
+      // 4. 새로운 기사만 푸시 발송
+      if (!alreadySent) {
+        await sendPushNotification(subscribers, "[속보]", cleanTitle, news.link);
+        await markAsSent(news.link, cleanTitle);
+        results.push({ title: cleanTitle, pushed: true });
+      } else {
+        results.push({ title: cleanTitle, pushed: false });
+      }
     }
   }
 
-  return NextResponse.json({ success: true, sent: results });
+  return NextResponse.json({ success: true, processed: results });
 }

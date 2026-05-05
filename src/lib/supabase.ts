@@ -47,6 +47,7 @@ export const getRecentNews = async (limit: number = 20): Promise<any[]> => {
   const { data, error } = await supabase
     .from("news")
     .select("*")
+    .gt("expires_at", new Date().toISOString()) // 24시간 지난 것 필터링
     .order("published_at", { ascending: false })
     .limit(limit);
 
