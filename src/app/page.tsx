@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Settings, Info, Zap, LayoutDashboard, History, Filter, ExternalLink } from "lucide-react";
+import { Bell, BellOff, Settings, Info, Zap, ExternalLink, X } from "lucide-react";
 import clsx from "clsx";
 
 function urlBase64ToUint8Array(base64String: string) {
@@ -17,14 +17,17 @@ function urlBase64ToUint8Array(base64String: string) {
 
 export default function Home() {
   const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
   const [recentNews, setRecentNews] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     const userAgent = window.navigator.userAgent.toLowerCase();
     setIsIOS(/iphone|ipad|ipod/.test(userAgent));
+    setIsStandalone(Boolean((window.navigator as any).standalone));
 
     if ("serviceWorker" in navigator && "PushManager" in window) {
       navigator.serviceWorker.register("/sw.js").then(async (reg) => {
@@ -112,105 +115,77 @@ export default function Home() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900 overflow-hidden">
-      {/* Sidebar (Desktop/Tablet) */}
-      <aside className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 p-6 space-y-8">
-        <h1 className="text-2xl font-bold text-blue-600 tracking-tight flex items-center gap-2">
-          <Zap className="w-6 h-6 fill-blue-600" /> Sokbo
-        </h1>
-        <div className="flex-1">
-          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-6">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 text-center">Notification</h3>
+    <div className="min-h-screen bg-slate-100 text-slate-900">
+      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 pb-10 pt-4 sm:px-6 sm:pt-6">
+        <header className="sticky top-0 z-20 -mx-4 mb-6 border-b border-slate-200/80 bg-slate-100/90 px-4 py-4 backdrop-blur-sm sm:-mx-6 sm:px-6">
+          <div className="mx-auto flex w-full max-w-3xl items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 shadow-lg shadow-blue-200">
+                <Zap className="h-5 w-5 fill-white text-white" />
+              </div>
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-blue-600">Live Breaking</p>
+                <h1 className="text-2xl font-black tracking-tight text-slate-900">Sokbo</h1>
+              </div>
+            </div>
             <button
-              onClick={subscription ? unsubscribeUser : requestPermission}
-              disabled={loading}
-              className={clsx(
-                "w-full py-4 rounded-2xl font-bold transition-all flex flex-col items-center gap-2",
-                subscription 
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-200" 
-                  : "bg-white border-2 border-slate-100 text-slate-400 hover:border-blue-200 hover:text-blue-500"
-              )}
+              onClick={() => setSettingsOpen(true)}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700"
+              aria-label="설정 열기"
             >
-              {subscription ? <Bell className="w-6 h-6" /> : <BellOff className="w-6 h-6" />}
-              <span className="text-sm">{subscription ? "알림 활성화됨" : "알림 켜기"}</span>
-            </button>
-          </div>
-          
-          <button 
-            onClick={testDirectPush}
-            disabled={isTesting || !subscription}
-            className="w-full py-3 rounded-xl text-xs font-bold text-slate-400 border border-slate-100 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
-          >
-            <Zap className="w-3 h-3" /> 푸시 테스트
-          </button>
-        </div>
-        <div className="text-[10px] text-slate-300 font-bold text-center">
-          © 2026 SOKBO PROJECT<br/>ALL NEWS FROM NAVER
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-y-auto pb-20 md:pb-0">
-        <header className="md:hidden flex justify-between items-center p-6 bg-white border-b sticky top-0 z-10">
-          <div className="flex items-center gap-2">
-            <Zap className="w-6 h-6 fill-blue-600 text-blue-600" />
-            <h1 className="text-xl font-black text-blue-600 tracking-tighter">SOKBO</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={testDirectPush}
-              disabled={isTesting || !subscription}
-              className={clsx("p-2 rounded-xl transition-all", subscription ? "text-amber-500 bg-amber-50" : "text-slate-200 bg-slate-50")}
-            >
-              <Zap className={clsx("w-5 h-5", isTesting && "animate-pulse")} />
-            </button>
-            <button 
-              onClick={subscription ? unsubscribeUser : requestPermission}
-              className={clsx("p-2 rounded-xl transition-all", subscription ? "text-blue-600 bg-blue-50" : "text-slate-300 bg-slate-100")}
-            >
-              {subscription ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
+              <Settings className="h-5 w-5" />
             </button>
           </div>
         </header>
 
-        <div className="p-6 max-w-2xl mx-auto w-full">
-          <div className="flex justify-between items-end mb-8">
+        <section className="mb-6 rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200/70 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-1">인사이트 피드</h2>
-              <p className="text-slate-400 text-sm font-medium">최근 24시간 내 발생한 모든 속보입니다.</p>
+              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Realtime Feed</p>
+              <h2 className="text-3xl font-black tracking-tight text-slate-900">속보가 먼저 보이는 첫 화면</h2>
+              <p className="mt-2 text-sm font-medium leading-6 text-slate-500">
+                최근 24시간 내 수집된 속보를 시간순으로 바로 확인합니다.
+              </p>
             </div>
-            <div className="hidden sm:flex gap-2">
-              <span className="bg-blue-600 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-tighter shadow-lg shadow-blue-100">Live 10m</span>
+            <div className="rounded-2xl bg-blue-50 px-3 py-2 text-right">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500">Live</p>
+              <p className="text-lg font-black text-blue-600">{recentNews.length}</p>
             </div>
           </div>
+        </section>
 
-          {isIOS && !(window.navigator as any).standalone && (
-            <div className="bg-amber-50 border-2 border-amber-100 rounded-3xl p-6 mb-8 flex gap-4 items-start animate-in slide-in-from-top-4 duration-500">
-              <Info className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-bold text-amber-800 text-sm mb-1">iPhone 알림 설정 안내</h4>
-                <p className="text-xs text-amber-700/80 leading-relaxed">
-                  하단 <strong>'공유 버튼'</strong>을 누르고 <strong>'홈 화면에 추가'</strong>를 하셔야 정상적으로 알림을 받으실 수 있습니다.
-                </p>
-              </div>
+        {isIOS && !isStandalone && (
+          <div className="mb-6 flex items-start gap-4 rounded-[28px] border border-amber-200 bg-amber-50 p-5">
+            <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+            <div>
+              <h4 className="text-sm font-bold text-amber-900">iPhone 알림 설정 안내</h4>
+              <p className="mt-1 text-xs leading-5 text-amber-800/80">
+                공유 버튼에서 `홈 화면에 추가`를 해야 푸시 알림이 정상 동작합니다.
+              </p>
             </div>
+          </div>
+        )}
+
+        <div className="grid gap-4">
+          {recentNews.length > 0 ? (
+            recentNews.map((news) => (
+              <NewsCard key={news.url} news={news} />
+            ))
+          ) : (
+            <EmptyState />
           )}
-
-          <div className="grid gap-4">
-            {recentNews.length > 0 ? (
-              recentNews.map((news) => (
-                <NewsCard key={news.url} news={news} />
-              ))
-            ) : (
-              <EmptyState />
-            )}
-          </div>
-          
-          <div className="mt-12 py-10 border-t border-slate-100 text-center">
-            <p className="text-[10px] font-black text-slate-200 uppercase tracking-[0.2em]">End of Feed</p>
-          </div>
         </div>
       </main>
+
+      <SettingsSheet
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        subscription={subscription}
+        loading={loading}
+        isTesting={isTesting}
+        onToggleNotifications={subscription ? unsubscribeUser : requestPermission}
+        onTestPush={testDirectPush}
+      />
     </div>
   );
 }
@@ -221,9 +196,9 @@ function NewsCard({ news }: { news: any }) {
       href={news.url} 
       target="_blank" 
       rel="noopener noreferrer"
-      className="group block bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-100 transition-all active:scale-[0.98] relative overflow-hidden"
+      className="group relative block overflow-hidden rounded-[30px] border border-slate-200/80 bg-white p-6 shadow-sm transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-xl hover:shadow-slate-200/70"
     >
-      <div className="flex justify-between items-center mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{news.source || "Naver News"}</span>
@@ -232,11 +207,11 @@ function NewsCard({ news }: { news: any }) {
           {new Date(news.published_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
         </span>
       </div>
-      <h3 className="text-xl font-bold text-slate-800 group-hover:text-blue-600 transition-colors mb-6 line-clamp-2 leading-[1.4] tracking-tight">
+      <h3 className="mb-6 line-clamp-2 text-xl font-bold leading-[1.45] tracking-tight text-slate-800 transition-colors group-hover:text-blue-600">
         {news.title}
       </h3>
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap gap-2">
           {news.reason_tags?.map((tag: string) => (
             <span key={tag} className="text-[9px] font-black text-blue-500 bg-blue-50 px-2 py-1 rounded-md uppercase">#{tag}</span>
           ))}
@@ -252,14 +227,111 @@ function NewsCard({ news }: { news: any }) {
 
 function EmptyState() {
   return (
-    <div className="text-center py-32 bg-white rounded-[40px] border border-dashed border-slate-200">
-      <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-8 animate-pulse">
-        <Zap className="w-12 h-12 text-slate-200" />
+    <div className="rounded-[36px] border border-dashed border-slate-200 bg-white py-28 text-center">
+      <div className="mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-full bg-slate-50 animate-pulse">
+        <Zap className="h-12 w-12 text-slate-200" />
       </div>
-      <h3 className="text-slate-800 font-black text-2xl mb-3 tracking-tighter">인사이트 스캔 중</h3>
-      <p className="text-slate-400 text-sm px-16 leading-relaxed font-medium">
+      <h3 className="mb-3 text-2xl font-black tracking-tighter text-slate-800">속보를 스캔 중입니다</h3>
+      <p className="px-8 text-sm font-medium leading-relaxed text-slate-400 sm:px-16">
         네이버 뉴스를 실시간으로 분석하고 있습니다.<br />새로운 속보가 감지되면 즉시 배달해 드립니다.
       </p>
+    </div>
+  );
+}
+
+function SettingsSheet({
+  isOpen,
+  onClose,
+  subscription,
+  loading,
+  isTesting,
+  onToggleNotifications,
+  onTestPush,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  subscription: PushSubscription | null;
+  loading: boolean;
+  isTesting: boolean;
+  onToggleNotifications: () => void;
+  onTestPush: () => void;
+}) {
+  return (
+    <div
+      className={clsx(
+        "fixed inset-0 z-30 transition",
+        isOpen ? "pointer-events-auto bg-slate-950/30" : "pointer-events-none bg-transparent"
+      )}
+    >
+      <div
+        className={clsx(
+          "absolute right-0 top-0 h-full w-full max-w-md transform bg-white p-5 shadow-2xl transition duration-200 sm:p-6",
+          isOpen ? "translate-x-0" : "translate-x-full"
+        )}
+      >
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Settings</p>
+            <h3 className="text-2xl font-black tracking-tight text-slate-900">알림 설정</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 transition hover:text-slate-700"
+            aria-label="설정 닫기"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <section className="rounded-[28px] bg-slate-50 p-5">
+            <div className="mb-4 flex items-center gap-3">
+              <div className={clsx("flex h-11 w-11 items-center justify-center rounded-2xl", subscription ? "bg-blue-600 text-white" : "bg-white text-slate-400")}>
+                {subscription ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-900">{subscription ? "알림이 활성화되어 있습니다" : "알림이 꺼져 있습니다"}</p>
+                <p className="text-xs text-slate-500">설정은 이 화면에서만 관리합니다.</p>
+              </div>
+            </div>
+            <button
+              onClick={onToggleNotifications}
+              disabled={loading}
+              className={clsx(
+                "w-full rounded-2xl px-4 py-3 text-sm font-bold transition",
+                subscription
+                  ? "bg-slate-900 text-white hover:bg-slate-800"
+                  : "bg-blue-600 text-white hover:bg-blue-500",
+                loading && "cursor-not-allowed opacity-60"
+              )}
+            >
+              {subscription ? "알림 끄기" : "알림 켜기"}
+            </button>
+          </section>
+
+          <section className="rounded-[28px] border border-slate-200 p-5">
+            <p className="mb-1 text-sm font-bold text-slate-900">푸시 테스트</p>
+            <p className="mb-4 text-xs leading-5 text-slate-500">
+              구독이 활성화된 경우 현재 기기에서 테스트 푸시를 바로 확인합니다.
+            </p>
+            <button
+              onClick={onTestPush}
+              disabled={isTesting || !subscription}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Zap className={clsx("h-4 w-4", isTesting && "animate-pulse")} />
+              테스트 푸시 보내기
+            </button>
+          </section>
+
+          <section className="rounded-[28px] border border-slate-200 p-5">
+            <p className="mb-1 text-sm font-bold text-slate-900">서비스 정보</p>
+            <p className="text-xs leading-5 text-slate-500">
+              Sokbo는 네이버 뉴스에서 속보 키워드를 수집해 최근 24시간 피드와 푸시 알림을 제공합니다.
+            </p>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
