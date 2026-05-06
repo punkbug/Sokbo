@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { isAlreadySent, markAsSent, supabase } from "@/lib/supabase";
+import { stripHtml } from "@/lib/naver";
 import { sendPushNotification } from "@/lib/push";
+import { getServerSupabase, isAlreadySent, markAsSent } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -14,20 +15,38 @@ export async function GET(request: Request) {
   const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000); // 3시간으로 대폭 완화
 
   try {
+    const supabase = getServerSupabase();
+    const clientId = process.env.NAVER_CLIENT_ID;
+    const clientSecret = process.env.NAVER_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      throw new Error("NAVER_CLIENT_ID or NAVER_CLIENT_SECRET is missing.");
+    }
+
     // 1. 모든 구독자 가져오기
-    const { data: subs } = await supabase.from("subscriptions").select("subscription_json");
-    const subscribers = subs?.map(s => s.subscription_json) || [];
+    const { data: subs, error: subsError } = await supabase
+      .from("subscriptions")
+      .select("subscription_json");
+    if (subsError) {
+      throw new Error(`Failed to load subscriptions: ${subsError.message}`);
+    }
+    const subscribers = (subs as Array<{ subscription_json: any }> | null)?.map(
+      ({ subscription_json }) => subscription_json
+    ) || [];
 
     // 2. 네이버 속보 수집 (결과 100개로 최대화)
     const response = await fetch(
       `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent("속보")}&display=100&sort=date`,
       {
         headers: {
-          "X-Naver-Client-Id": process.env.NAVER_CLIENT_ID!,
-          "X-Naver-Client-Secret": process.env.NAVER_CLIENT_SECRET!,
+          "X-Naver-Client-Id": clientId,
+          "X-Naver-Client-Secret": clientSecret,
         },
       }
     );
+    if (!response.ok) {
+      throw new Error(`Naver API request failed with ${response.status} ${response.statusText}`);
+    }
     const data = await response.json();
     const rawNews = data.items || [];
 
@@ -36,7 +55,7 @@ export async function GET(request: Request) {
 
     for (const item of rawNews) {
       const pubDate = new Date(item.pubDate);
-      const cleanTitle = item.title.replace(/<[^>]*>?/gm, "").replace(/&quot;/g, '"');
+      const cleanTitle = stripHtml(item.title);
       
       // 필터: 3시간 이내 + 제목에 '속보' 포함
       if (pubDate >= threeHoursAgo && cleanTitle.includes("속보")) {
