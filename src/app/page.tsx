@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PRESETS } from "@/lib/presets";
-import { Bell, BellOff, Settings, Info, Zap, LayoutDashboard, History, Filter } from "lucide-react";
+import { Bell, BellOff, Settings, Info, Zap, LayoutDashboard, History, Filter, ExternalLink } from "lucide-react";
 import clsx from "clsx";
 
 function urlBase64ToUint8Array(base64String: string) {
@@ -17,10 +16,8 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"feed" | "settings" | "history">("feed");
   const [isIOS, setIsIOS] = useState(false);
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
-  const [subscribedPresets, setSubscribedPresets] = useState<string[]>([]);
   const [recentNews, setRecentNews] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -39,9 +36,6 @@ export default function Home() {
       });
     }
 
-    const saved = localStorage.getItem("subscribedPresets");
-    if (saved) setSubscribedPresets(JSON.parse(saved));
-
     const fetchNews = async () => {
       const res = await fetch("/api/news");
       if (res.ok) setRecentNews(await res.json());
@@ -59,9 +53,33 @@ export default function Home() {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidKey),
       });
+      
+      // 서버에 구독 정보 저장 (컨셉 변경에 따라 단일 채널 구독)
+      await fetch("/api/subscribe", {
+        method: "POST",
+        body: JSON.stringify({ subscription: sub, preset: "all", action: "subscribe" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      
       setSubscription(sub);
     } catch (e) {
       console.error("Subscription failed", e);
+    }
+  };
+
+  const unsubscribeUser = async () => {
+    if (!subscription) return;
+    setLoading(true);
+    try {
+      await fetch("/api/subscribe", {
+        method: "POST",
+        body: JSON.stringify({ subscription, preset: "all", action: "unsubscribe" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      await subscription.unsubscribe();
+      setSubscription(null);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -75,31 +93,6 @@ export default function Home() {
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const togglePreset = async (preset: string) => {
-    if (!subscription) {
-      alert("먼저 알림 권한을 허용해주세요.");
-      return;
-    }
-    const isSubscribed = subscribedPresets.includes(preset);
-    const action = isSubscribed ? "unsubscribe" : "subscribe";
-    try {
-      const res = await fetch("/api/subscribe", {
-        method: "POST",
-        body: JSON.stringify({ subscription, preset, action }),
-        headers: { "Content-Type": "application/json" },
-      });
-      if (res.ok) {
-        const newPresets = isSubscribed
-          ? subscribedPresets.filter((p) => p !== preset)
-          : [...subscribedPresets, preset];
-        setSubscribedPresets(newPresets);
-        localStorage.setItem("subscribedPresets", JSON.stringify(newPresets));
-      }
-    } catch (e) {
-      console.error(e);
     }
   };
 
@@ -122,103 +115,102 @@ export default function Home() {
     <div className="flex min-h-screen bg-slate-50 text-slate-900 overflow-hidden">
       {/* Sidebar (Desktop/Tablet) */}
       <aside className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 p-6 space-y-8">
-        <h1 className="text-2xl font-bold text-blue-600 tracking-tight">Sokbo 2.0</h1>
-        <nav className="flex-1 space-y-2">
-          <NavItem icon={LayoutDashboard} label="인사이트 피드" active={activeTab === "feed"} onClick={() => setActiveTab("feed")} />
-          <NavItem icon={History} label="발송 이력" active={activeTab === "history"} onClick={() => setActiveTab("history")} />
-          <NavItem icon={Settings} label="알림 설정" active={activeTab === "settings"} onClick={() => setActiveTab("settings")} />
-        </nav>
-        <div className="bg-slate-50 p-4 rounded-xl text-xs text-slate-500">
-          오늘 엄선된 소식: <span className="font-bold text-blue-600">{recentNews.length}개</span>
+        <h1 className="text-2xl font-bold text-blue-600 tracking-tight flex items-center gap-2">
+          <Zap className="w-6 h-6 fill-blue-600" /> Sokbo
+        </h1>
+        <div className="flex-1">
+          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-6">
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 text-center">Notification</h3>
+            <button
+              onClick={subscription ? unsubscribeUser : requestPermission}
+              disabled={loading}
+              className={clsx(
+                "w-full py-4 rounded-2xl font-bold transition-all flex flex-col items-center gap-2",
+                subscription 
+                  ? "bg-blue-600 text-white shadow-lg shadow-blue-200" 
+                  : "bg-white border-2 border-slate-100 text-slate-400 hover:border-blue-200 hover:text-blue-500"
+              )}
+            >
+              {subscription ? <Bell className="w-6 h-6" /> : <BellOff className="w-6 h-6" />}
+              <span className="text-sm">{subscription ? "알림 활성화됨" : "알림 켜기"}</span>
+            </button>
+          </div>
+          
+          <button 
+            onClick={testDirectPush}
+            disabled={isTesting || !subscription}
+            className="w-full py-3 rounded-xl text-xs font-bold text-slate-400 border border-slate-100 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+          >
+            <Zap className="w-3 h-3" /> 푸시 테스트
+          </button>
+        </div>
+        <div className="text-[10px] text-slate-300 font-bold text-center">
+          © 2026 SOKBO PROJECT<br/>ALL NEWS FROM NAVER
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-y-auto pb-20 md:pb-0">
         <header className="md:hidden flex justify-between items-center p-6 bg-white border-b sticky top-0 z-10">
-          <h1 className="text-xl font-bold text-blue-600">Sokbo</h1>
-          <button onClick={testDirectPush} disabled={isTesting || !subscription}>
-            <Zap className={clsx("w-5 h-5", isTesting ? "animate-pulse text-amber-500" : "text-slate-400")} />
-          </button>
+          <div className="flex items-center gap-2">
+            <Zap className="w-6 h-6 fill-blue-600 text-blue-600" />
+            <h1 className="text-xl font-black text-blue-600 tracking-tighter">SOKBO</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={testDirectPush}
+              disabled={isTesting || !subscription}
+              className={clsx("p-2 rounded-xl transition-all", subscription ? "text-amber-500 bg-amber-50" : "text-slate-200 bg-slate-50")}
+            >
+              <Zap className={clsx("w-5 h-5", isTesting && "animate-pulse")} />
+            </button>
+            <button 
+              onClick={subscription ? unsubscribeUser : requestPermission}
+              className={clsx("p-2 rounded-xl transition-all", subscription ? "text-blue-600 bg-blue-50" : "text-slate-300 bg-slate-100")}
+            >
+              {subscription ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
+            </button>
+          </div>
         </header>
 
-        <div className="p-6 max-w-4xl mx-auto w-full">
-          {activeTab === "feed" && (
-            <section className="space-y-6">
-              <div className="flex justify-between items-end mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold">인사이트 피드</h2>
-                  <p className="text-slate-500 text-sm">최근 24시간 내 엄선된 소식입니다.</p>
-                </div>
-                {!subscription && (
-                  <button onClick={requestPermission} className="bg-blue-600 text-white text-xs px-4 py-2 rounded-full font-bold shadow-md hover:bg-blue-700 transition-all">
-                    알림 켜기
-                  </button>
-                )}
-              </div>
+        <div className="p-6 max-w-2xl mx-auto w-full">
+          <div className="flex justify-between items-end mb-8">
+            <div>
+              <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-1">인사이트 피드</h2>
+              <p className="text-slate-400 text-sm font-medium">최근 24시간 내 발생한 모든 속보입니다.</p>
+            </div>
+            <div className="hidden sm:flex gap-2">
+              <span className="bg-blue-600 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-tighter shadow-lg shadow-blue-100">Live 10m</span>
+            </div>
+          </div>
 
-              <div className="grid gap-4">
-                {recentNews.length > 0 ? (
-                  recentNews.map((news) => (
-                    <NewsCard key={news.url} news={news} />
-                  ))
-                ) : (
-                  <EmptyState />
-                )}
-              </div>
-            </section>
-          )}
-
-          {activeTab === "settings" && (
-            <section className="space-y-8 animate-in fade-in duration-300">
+          {isIOS && !(window.navigator as any).standalone && (
+            <div className="bg-amber-50 border-2 border-amber-100 rounded-3xl p-6 mb-8 flex gap-4 items-start animate-in slide-in-from-top-4 duration-500">
+              <Info className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
               <div>
-                <h2 className="text-2xl font-bold mb-2">무엇을 받을까요?</h2>
-                <p className="text-slate-500 text-sm">관심 있는 주제를 선택하면 고품질 속보를 10분 내로 전해드립니다.</p>
+                <h4 className="font-bold text-amber-800 text-sm mb-1">iPhone 알림 설정 안내</h4>
+                <p className="text-xs text-amber-700/80 leading-relaxed">
+                  하단 <strong>'공유 버튼'</strong>을 누르고 <strong>'홈 화면에 추가'</strong>를 하셔야 정상적으로 알림을 받으실 수 있습니다.
+                </p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {Object.keys(PRESETS).map((p) => (
-                  <button 
-                    key={p} 
-                    onClick={() => togglePreset(p)}
-                    className={clsx(
-                      "p-4 rounded-2xl border transition-all text-left group relative overflow-hidden",
-                      subscribedPresets.includes(p) ? "border-blue-500 bg-blue-50/50" : "border-slate-200 bg-white hover:border-slate-300"
-                    )}
-                  >
-                    <span className={clsx("block font-bold mb-1", subscribedPresets.includes(p) ? "text-blue-700" : "text-slate-700")}>{p}</span>
-                    <span className="text-[10px] text-slate-400 font-medium">
-                      {subscribedPresets.includes(p) ? "실시간 수신 중" : "알림 받기"}
-                    </span>
-                    {subscribedPresets.includes(p) && <div className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full animate-ping" />}
-                  </button>
-                ))}
-              </div>
-            </section>
+            </div>
           )}
 
-          {activeTab === "history" && (
-            <section className="space-y-4">
-              <h2 className="text-2xl font-bold">발송 이력</h2>
-              <p className="text-slate-500 text-sm">최근 발송된 모든 소식의 타임라인입니다.</p>
-              <div className="space-y-3 opacity-60">
-                {recentNews.map((news) => (
-                  <div key={news.url + "_h"} className="flex gap-4 items-center bg-white p-4 rounded-xl border border-slate-100">
-                    <span className="text-xs font-bold text-slate-400 w-16">{new Date(news.published_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>
-                    <p className="text-sm font-medium text-slate-600 truncate flex-1">{news.title}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+          <div className="grid gap-4">
+            {recentNews.length > 0 ? (
+              recentNews.map((news) => (
+                <NewsCard key={news.url} news={news} />
+              ))
+            ) : (
+              <EmptyState />
+            )}
+          </div>
+          
+          <div className="mt-12 py-10 border-t border-slate-100 text-center">
+            <p className="text-[10px] font-black text-slate-200 uppercase tracking-[0.2em]">End of Feed</p>
+          </div>
         </div>
       </main>
-
-      {/* Bottom Nav (Mobile Only) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-slate-200 flex justify-around p-3 z-20">
-        <MobileNavItem icon={LayoutDashboard} active={activeTab === "feed"} onClick={() => setActiveTab("feed")} />
-        <MobileNavItem icon={History} active={activeTab === "history"} onClick={() => setActiveTab("history")} />
-        <MobileNavItem icon={Settings} active={activeTab === "settings"} onClick={() => setActiveTab("settings")} />
-      </nav>
     </div>
   );
 }
@@ -228,64 +220,45 @@ function NewsCard({ news }: { news: any }) {
     <a 
       href={news.url} 
       target="_blank" 
-      className="group block bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all active:scale-[0.99] relative overflow-hidden"
+      rel="noopener noreferrer"
+      className="group block bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-100 transition-all active:scale-[0.98] relative overflow-hidden"
     >
-      <div className="flex justify-between items-start mb-3">
-        <span className="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-tight">{news.category}</span>
-        <span className="text-[10px] text-slate-400 font-medium">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{news.source || "Naver News"}</span>
+        </div>
+        <span className="text-[10px] font-bold text-slate-300 bg-slate-50 px-2 py-1 rounded-lg">
           {new Date(news.published_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
         </span>
       </div>
-      <h3 className="text-lg font-bold text-slate-800 group-hover:text-blue-600 transition-colors mb-4 line-clamp-2 leading-snug">
+      <h3 className="text-xl font-bold text-slate-800 group-hover:text-blue-600 transition-colors mb-6 line-clamp-2 leading-[1.4] tracking-tight">
         {news.title}
       </h3>
-      <div className="flex flex-wrap gap-2 items-center">
-        {news.reason_tags?.map((tag: string) => (
-          <span key={tag} className="text-[10px] text-blue-500 bg-blue-50 px-2 py-1 rounded-md font-bold tracking-tight">#{tag}</span>
-        ))}
-        <div className="ml-auto flex items-center gap-2">
-          <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (news.score / 200) * 100)}%` }} />
-          </div>
-          <span className="text-[9px] text-slate-300 font-black">VAL {news.score}</span>
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          {news.reason_tags?.map((tag: string) => (
+            <span key={tag} className="text-[9px] font-black text-blue-500 bg-blue-50 px-2 py-1 rounded-md uppercase">#{tag}</span>
+          ))}
+        </div>
+        <div className="flex items-center gap-1 text-blue-600 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
+          <span className="text-[10px] font-black uppercase">Read Full</span>
+          <ExternalLink className="w-3 h-3" />
         </div>
       </div>
     </a>
   );
 }
 
-function NavItem({ icon: Icon, label, active, onClick }: any) {
-  return (
-    <button 
-      onClick={onClick}
-      className={clsx(
-        "flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold transition-all",
-        active ? "bg-blue-600 text-white shadow-lg shadow-blue-200" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
-      )}
-    >
-      <Icon className="w-5 h-5" />
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function MobileNavItem({ icon: Icon, active, onClick }: any) {
-  return (
-    <button onClick={onClick} className={clsx("p-2 rounded-2xl transition-all", active ? "text-blue-600 bg-blue-50 px-6" : "text-slate-300")}>
-      <Icon className="w-6 h-6" />
-    </button>
-  );
-}
-
 function EmptyState() {
   return (
-    <div className="text-center py-24 bg-white rounded-[32px] border border-dashed border-slate-200">
-      <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
-        <Zap className="w-10 h-10 text-slate-200" />
+    <div className="text-center py-32 bg-white rounded-[40px] border border-dashed border-slate-200">
+      <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-8 animate-pulse">
+        <Zap className="w-12 h-12 text-slate-200" />
       </div>
-      <h3 className="text-slate-800 font-black text-xl mb-2 tracking-tight">인사이트 스캔 중</h3>
-      <p className="text-slate-400 text-sm px-12 leading-relaxed">
-        선택한 관심사에 가치 있는 소식이 감지되면<br />10분 내로 이곳에 배달됩니다.
+      <h3 className="text-slate-800 font-black text-2xl mb-3 tracking-tighter">인사이트 스캔 중</h3>
+      <p className="text-slate-400 text-sm px-16 leading-relaxed font-medium">
+        네이버 뉴스를 실시간으로 분석하고 있습니다.<br />새로운 속보가 감지되면 즉시 배달해 드립니다.
       </p>
     </div>
   );
