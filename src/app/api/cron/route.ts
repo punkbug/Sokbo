@@ -11,68 +11,77 @@ export async function GET(request: Request) {
   }
 
   const now = new Date();
-  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000); // 3시간으로 대폭 완화
 
-  // 1. 모든 구독자 가져오기
-  const { data: subs } = await supabase.from("subscriptions").select("subscription_json");
-  const subscribers = subs?.map(s => s.subscription_json) || [];
+  try {
+    // 1. 모든 구독자 가져오기
+    const { data: subs } = await supabase.from("subscriptions").select("subscription_json");
+    const subscribers = subs?.map(s => s.subscription_json) || [];
 
-  // 2. 네이버 속보 수집 (결과 50개)
-  const response = await fetch(
-    `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent("속보")}&display=50&sort=date`,
-    {
-      headers: {
-        "X-Naver-Client-Id": process.env.NAVER_CLIENT_ID!,
-        "X-Naver-Client-Secret": process.env.NAVER_CLIENT_SECRET!,
-      },
-    }
-  );
-  const data = await response.json();
-  const rawNews = data.items || [];
+    // 2. 네이버 속보 수집 (결과 100개로 최대화)
+    const response = await fetch(
+      `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent("속보")}&display=100&sort=date`,
+      {
+        headers: {
+          "X-Naver-Client-Id": process.env.NAVER_CLIENT_ID!,
+          "X-Naver-Client-Secret": process.env.NAVER_CLIENT_SECRET!,
+        },
+      }
+    );
+    const data = await response.json();
+    const rawNews = data.items || [];
 
-  const results = [];
+    const results = [];
+    const dbErrors = [];
 
-  for (const item of rawNews) {
-    const pubDate = new Date(item.pubDate);
-    const cleanTitle = item.title.replace(/<[^>]*>?/gm, "").replace(/&quot;/g, '"');
-    
-    // 필터: 1시간 이내 + 제목에 '속보' 포함
-    if (pubDate >= oneHourAgo && cleanTitle.includes("속보")) {
+    for (const item of rawNews) {
+      const pubDate = new Date(item.pubDate);
+      const cleanTitle = item.title.replace(/<[^>]*>?/gm, "").replace(/&quot;/g, '"');
       
-      // A. 앱 내 피드용 저장 (upsert 사용: 이미 있으면 업데이트, 없으면 삽입)
-      // 이렇게 해야 중복 에러로 로직이 멈추는 것을 방지합니다.
-      const { error: dbError } = await supabase.from("news").upsert([
-        {
-          title: cleanTitle,
-          url: item.link,
-          category: "속보",
-          score: 100, // 점수화 로직 생략, 기본값 부여
-          reason_tags: ["실시간"],
-          published_at: pubDate.toISOString(),
-          expires_at: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+      // 필터: 3시간 이내 + 제목에 '속보' 포함
+      if (pubDate >= threeHoursAgo && cleanTitle.includes("속보")) {
+        
+        // A. DB 저장 시도
+        const { error: dbError } = await supabase.from("news").upsert([
+          {
+            title: cleanTitle,
+            url: item.link,
+            category: "속보",
+            score: 100,
+            reason_tags: ["실시간"],
+            published_at: pubDate.toISOString(),
+            expires_at: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+          }
+        ], { onConflict: 'url' });
+
+        if (dbError) {
+          dbErrors.push({ title: cleanTitle, error: dbError });
+          continue;
         }
-      ], { onConflict: 'url' });
 
-      if (dbError) console.error("News Table Upsert Error:", dbError);
-
-      // B. 푸시 발송 여부 결정
-      const alreadyPushed = await isAlreadySent(item.link);
-      if (!alreadyPushed) {
-        // 실제 푸시 발송
-        await sendPushNotification(subscribers, "[속보]", cleanTitle, item.link);
-        // 발송 이력 기록 (sent_history)
-        await markAsSent(item.link, cleanTitle);
-        results.push({ title: cleanTitle, status: "pushed" });
-      } else {
-        results.push({ title: cleanTitle, status: "already_saved" });
+        // B. 푸시 발송
+        const alreadyPushed = await isAlreadySent(item.link);
+        if (!alreadyPushed) {
+          await sendPushNotification(subscribers, "[속보]", cleanTitle, item.link);
+          await markAsSent(item.link, cleanTitle);
+          results.push({ title: cleanTitle, status: "pushed" });
+        } else {
+          results.push({ title: cleanTitle, status: "updated_in_db" });
+        }
       }
     }
-  }
 
-  return NextResponse.json({ 
-    success: true, 
-    time: now.toISOString(),
-    foundCount: results.length,
-    details: results 
-  });
+    return NextResponse.json({ 
+      success: true, 
+      currentTime: now.toISOString(),
+      rawCount: rawNews.length,
+      processedCount: results.length,
+      dbErrors: dbErrors.length > 0 ? dbErrors : undefined,
+      details: results 
+    });
+
+  } catch (globalError: any) {
+    console.error("Critical Cron Error:", globalError);
+    return NextResponse.json({ success: false, error: globalError.message }, { status: 500 });
+  }
 }
